@@ -1,181 +1,160 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdbool.h>
 #include <sys/utsname.h>
 #include <sys/sysinfo.h>
 #include <sys/types.h>
 #include <utmp.h>
 
-// Function to parse command line arguments
-void parseArgs(int argc, char *argv[], int *samples, int *tdelay, int *graphics, int *sequential, int *sys, int *user) {
-    int opt;
-    while ((opt = getopt(argc, argv, "s:t:gus")) != -1) {
-        switch (opt) {
-            case 's':
-                *samples = atoi(optarg);
-                break;
-            case 't':
-                *tdelay = atoi(optarg);
-                break;
-            case 'g':
-                *graphics = 1;
-                break;
-            case 'u':
-                *sequential = 1;
-                break;
-            case 's':
-                *sys = 1;
-                break;
-            case 'u':
-                *user = 1;
-                break;
-            default:
-                printf("Usage: %s [-s samples] [-t tdelay] [-g graphics] [-s system] [-u user]\n", argv[0]);
-                exit(EXIT_FAILURE);
-        }
-    }
-    if (optind < argc) {
-        if (argc - optind == 2) {
-            *samples = atoi(argv[optind]);
-            *tdelay = atoi(argv[optind+1]);
-        } else {
-            printf("Usage: %s [-s samples] [-t tdelay] [-g graphics] [-s system] [-u user]\n", argv[0]);
-            exit(EXIT_FAILURE);
-        }
-    }
+//TO DO: fix delay and samples command line parsing, figure out this screen refreshing thing
+void headerUsage(){
+//Get the memory usage
+struct sysinfo memInfo;
+long used_memory = (info.totalram - info.freeram) / 1024;
+
+printf("Nbr of samples: %d -- every %d secs\n Memory usage: %ld kilobytes\n", samples, tdelay, used_memory);
+
 }
 
-// Function to get number of connected users
-int getConnectedUsers() {
-    struct utmp *entry;
-    int count = 0;
+void footerUsage(){
+
+    struct utsname sysinfo;
+    uname(&sysinfo);
+
+    printf("--------------------------------------------\n");
+    printf("### System Information ###\n");
+    printf(" System Name = %s\n", sysinfo.sysname);
+    printf(" Machine Name = %s\n", sysinfo.nodename);
+    printf(" Version = %s\n", sysinfo.version);
+    printf(" Release = %s\n", sysinfo.release);
+    printf(" Architecture = %s\n", sysinfo.machine);
+    printf("--------------------------------------------\n");
+
+}
+
+void systemOutput(){
+
+    printf("--------------------------------------------\n");
+    printf("### Memory ### (Phys.Used/Tot -- Virtual Used/Tot)\n");
+
+    struct sysinfo memory;
+    sysinfo (&memory);
+
+    double total_memory = memory.totalram * memory.mem_unit / (1024 * 1024 * 1024);
+    double used_memory = (memory.totalram - memory.freeram) * memory.mem_unit / (1024 * 1024 * 1024);
+    double total_virtual = (memory.totalram + memory.totalswap) * memory.mem_unit / (1024 * 1024 * 1024);
+    double used_virtual = (memory.totalram - memory.freeram + memory.totalswap - memory.freeswap) * memory.mem_unit / (1024 * 1024 * 1024);
+
+    printf("%.2f GB / %.2f GB -- %.2f GB / %.2f GB\n", used_memory, total_memory, used_virtual, total_virtual);
+
+
+}
+
+void userOutput(){
+    //Ask question about what exactly to print out in terms of user information (user, session, terminal, IP)???
+    printf("--------------------------------------------\n");
+    printf("### Sessions/users ###\n");
+
+    struct utmp *utmp;
     setutent();
-    while ((entry = getutent()) != NULL) {
-        if (entry->ut_type == USER_PROCESS) {
-            count++;
+
+    while ((utmp = getutent()) != NULL) {
+        if (utmp -> ut_type == USER_PROCESS) {
+            //User, session, terminal
+            printf("%s\t %s (%s)", utmp -> ut_user, utmp -> ut_session, utmp -> ut_line);
         }
     }
+
     endutent();
-    return count;
+
 }
 
-// Function to get number of sessions per user
-void getUserSessions(int *sessions) {
-    struct utmp *entry;
-    setutent();
-    while ((entry = getutent()) != NULL) {
-        if (entry->ut_type == USER_PROCESS) {
-            sessions[entry->ut_user]++;
+void CPUOutput(){
+
+    //Ask how he wants us to calculate the CPU usage
+    struct sysinfo cpu;
+    sysinfo (&cpu);
+    double use = ((double)(cpu.uptime - cpu.idle) / (double)cpu.uptime) * 100;
+
+    printf("--------------------------------------------\n");
+    printf("Number of Cores: %d\n", sysconf(_SC_NPROCESSORS_ONLN));
+    printf(" total cpu use: %d%\n", use);
+
+}
+
+void graphicsOutput(){
+
+}
+
+void display(int samples, int tdelay, bool system, bool user, bool graphics, bool sequential){
+
+    for (int i = 0; i < samples; i++){
+        
+        if (!sequential){
+        system("clear");
         }
-    }
-    endutent();
-}
-
-// Function to get system usage
-void getSystemUsage(float *cpu, int *memory) {
-    FILE *file;
-    char line[100];
-    int i;
-
-    // Get CPU usage
-    file = fopen("/proc/stat", "r");
-    fgets(line, 100, file);
-    fclose(file);
-    sscanf(line, "cpu %f %*f %*f %*f", &cpu);
-
-    // Get memory usage
-    file = fopen("/proc/meminfo", "r");
-    for (i = 0; i < 2; i++) {
-        fgets(line, 100, file);
-    }
-    sscanf(line, "MemTotal: %d kB", &memory[0]);
-    for (i = 0; i < 3; i++) {
-        fgets(line, 100, file);
-    }
-    sscanf(line, "MemFree: %d kB", &memory[1]);
-    fclose(file);
-}
-
-// Function to print system usage
-void printSystemUsage(float cpu, int *memory) {
-    printf("Memory usage: %d kilobytes\n", memory[0]);
-    printf("Free memory: %d kilobytes\n", memory[1]);
-    printf("CPU usage: %.2f%%\n", cpu);
-}
-
-// Function to print user usage
-void printUserUsage(int users, int *sessions) {
-    int i;
-    printf("Number of connected users: %d\n", users);
-    printf("Sessions per user:\n");
-    for (i = 0; i < 32; i++) {
-        if (sessions[i] > 0) {
-            printf("%c: %d\n", i, sessions[i]);
+        headerUsage();
+        if (system){
+            systemOutput();
         }
-    }
-}
-
-int main(int argc, char *argv[]) {
-    int samples = 10, tdelay = 1, graphics = 0, sequential = 0, sys = 0, user = 0;
-    int i, users, memory[2], sessions[32] = {0};
-    float cpu;
-
-    parseArgs(argc, argv, &samples, &tdelay, &graphics, &sequential, &sys, &user);
-
-    for (i = 0; i < samples; i++) {
-        if (sys) {
-            getSystemUsage(&cpu, memory);
-            if (!sequential) {
-                printf("Sample %d\n", i+1);
-                printSystemUsage(cpu, memory);
-                printf("------------------------------\n");
-            } else {
-                printf("Sample %d: CPU usage: %.2f%%, Memory usage: %d kB, Free memory: %d kB\n", i+1, cpu, memory[0], memory[1]);
-            }
+        if (user){
+            userOutput();
         }
-        if (user) {
-            users = getConnectedUsers();
-            getUserSessions(sessions);
-            if (!sequential) {
-                printf("Sample %d\n", i+1);
-                printUserUsage(users, sessions);
-                printf("------------------------------\n");
-            } else {
-                                printf("Sample %d: Number of connected users: %d\n", i+1, users);
-                for (int j = 0; j < 32; j++) {
-                    if (sessions[j] > 0) {
-                        printf("User %c: %d sessions\n", j, sessions[j]);
-                    }
-                }
-            }
+        if (system){
+
+        }
+        if (graphics){
+            graphicsOutput();
         }
         sleep(tdelay);
     }
 
-    if (graphics) {
-        // Graphical output for memory usage
-        printf("Graphical representation of memory usage:\n");
-        float percent = ((float)memory[1] / (float)memory[0]) * 100;
-        int blocks = (int)(percent / 5);
-        for (i = 0; i < blocks; i++) {
-            printf("::::::@");
-        }
-        for (i = 0; i < 20 - blocks; i++) {
-            printf("######*");
-        }
-        printf("\n");
+    footerUsage();
 
-        // Graphical output for CPU usage (if samples > 1)
-        if (samples > 1) {
-            printf("Graphical representation of CPU usage:\n");
-            blocks = (int)(cpu / 5);
-            for (i = 0; i < blocks; i++) {
-                printf("||||");
-            }
-            printf("\n");
-        }
+}
+int main(int argc, char *argv[]){
+
+    int samples = 10; int tdelay = 1;
+    bool system = false; bool user = false; bool graphics = false; bool sequential = false;
+
+    if (argc == 1){
+        display(samples, tdelay, true, true, false, false);
     }
 
-    return 0;
-}
+    bool found = false;
 
+    for (int i = 1; i < argc; i++){
+        if (strcmp(argv[i], "--system") == 0 || strcmp(argv[i], "-s") == 0){
+            system = true;
+        }
+        else if (strcmp(argv[i], "--user") == 0 || strcmp(argv[i], "-u") == 0){
+            user = true;
+        }
+        else if (strcmp(argv[i], "--graphics") == 0 || strcmp(argv[i], "-g") == 0){
+            graphics = true;
+        }
+        else if (strcmp(argv[i], "--sequential") == 0 || strcmp(argv[i], "-seq") == 0){
+            sequential = true;
+        }
+        else if (strncmp(argv[i], "--samples=", 10) == 0){
+            sscanf(argv[i], "%d", &samples);
+            found = true;
+        }
+        else if (strncmp(argv[i], "--tdelay=", 9) == 0){
+            sscanf(argv[i], "%d", &tdelay);
+        }
+        else if (isdigit(argv[i])){
+            if (!found){
+                samples = atoi(argv[i]);
+                found = true;
+            }
+            else{
+                tdelay = atoi(argv[i]);
+            }
+        }
+
+    }
+
+    display(samples, tdelay, system, user, graphics, sequential);
+}
