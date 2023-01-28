@@ -1,17 +1,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include <sys/utsname.h>
 #include <sys/sysinfo.h>
 #include <sys/types.h>
 #include <utmp.h>
 
 //TO DO: fix delay and samples command line parsing, figure out this screen refreshing thing
-void headerUsage(){
+void headerUsage(int samples, int tdelay){
 //Get the memory usage
 struct sysinfo memInfo;
-long used_memory = (info.totalram - info.freeram) / 1024;
+sysinfo(&memInfo);
+long used_memory = (memInfo.totalram - memInfo.freeram) / 1024;
 
 printf("Nbr of samples: %d -- every %d secs\n Memory usage: %ld kilobytes\n", samples, tdelay, used_memory);
 
@@ -33,7 +36,7 @@ void footerUsage(){
 
 }
 
-void systemOutput(){
+void systemOutput(char *terminal){
 
     printf("--------------------------------------------\n");
     printf("### Memory ### (Phys.Used/Tot -- Virtual Used/Tot)\n");
@@ -46,9 +49,8 @@ void systemOutput(){
     double total_virtual = (memory.totalram + memory.totalswap) * memory.mem_unit / (1024 * 1024 * 1024);
     double used_virtual = (memory.totalram - memory.freeram + memory.totalswap - memory.freeswap) * memory.mem_unit / (1024 * 1024 * 1024);
 
-    printf("%.2f GB / %.2f GB -- %.2f GB / %.2f GB\n", used_memory, total_memory, used_virtual, total_virtual);
-
-
+    sprintf(terminal + strlen(terminal), "%.2f GB / %.2f GB -- %.2f GB / %.2f GB\n", used_memory, total_memory, used_virtual, total_virtual);
+    printf("%s", terminal);
 }
 
 void userOutput(){
@@ -62,7 +64,7 @@ void userOutput(){
     while ((utmp = getutent()) != NULL) {
         if (utmp -> ut_type == USER_PROCESS) {
             //User, session, terminal
-            printf("%s\t %s (%s)", utmp -> ut_user, utmp -> ut_session, utmp -> ut_line);
+            printf("%s\t %d (%s)", utmp -> ut_user, utmp -> ut_session, utmp -> ut_line);
         }
     }
 
@@ -74,12 +76,13 @@ void CPUOutput(){
 
     //Ask how he wants us to calculate the CPU usage
     struct sysinfo cpu;
-    sysinfo (&cpu);
-    double use = ((double)(cpu.uptime - cpu.idle) / (double)cpu.uptime) * 100;
+    sysinfo(&cpu);
+    //Need to fix this 100 is a placeholder
+    double use = ((double)(cpu.uptime - 100) / (double)cpu.uptime) * 100;
 
     printf("--------------------------------------------\n");
-    printf("Number of Cores: %d\n", sysconf(_SC_NPROCESSORS_ONLN));
-    printf(" total cpu use: %d%\n", use);
+    printf("Number of Cores: %ld\n", sysconf(_SC_NPROCESSORS_ONLN));
+    printf(" total cpu use: %f%%\n", use);
 
 }
 
@@ -89,20 +92,22 @@ void graphicsOutput(){
 
 void display(int samples, int tdelay, bool system, bool user, bool graphics, bool sequential){
 
+char terminal_memory_output[1024];
+
     for (int i = 0; i < samples; i++){
         
-        if (!sequential){
-        system("clear");
+        if (!sequential && i != samples){
+            printf("\033[2J \033[1;1H\n");
         }
-        headerUsage();
+        headerUsage(samples, tdelay);
         if (system){
-            systemOutput();
+            systemOutput(terminal_memory_output);
         }
         if (user){
             userOutput();
         }
         if (system){
-
+            CPUOutput();
         }
         if (graphics){
             graphicsOutput();
