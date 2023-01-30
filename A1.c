@@ -102,6 +102,7 @@ char terminal_memory_output[1024];
         headerUsage(samples, tdelay);
         if (system){
             systemOutput(terminal_memory_output);
+            //Need to add loop for blank lines
         }
         if (user){
             userOutput();
