@@ -10,15 +10,16 @@
 #include <sys/types.h>
 #include <utmp.h>
 
-//TO DO: fix users, CPU and command line parsing, graphics
+//TO DO: Fix users, CPU, graphics, sequential?
 
 void headerUsage(int samples, int tdelay){
-//Get the memory usage
-struct rusage usage;
-getrusage(RUSAGE_SELF, &usage);
-long used_memory = usage.ru_maxrss;
 
-printf("Nbr of samples: %d -- every %d secs\n Memory usage: %ld kilobytes\n", samples, tdelay, used_memory);
+    //Get the memory usage
+    struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    long used_memory = usage.ru_maxrss;
+
+    printf("Nbr of samples: %d -- every %d secs\n Memory usage: %ld kilobytes\n", samples, tdelay, used_memory);
 
 }
 
@@ -44,7 +45,7 @@ void systemOutput(char *terminal){
     printf("### Memory ### (Phys.Used/Tot -- Virtual Used/Tot)\n");
 
     struct sysinfo memory;
-    sysinfo (&memory);
+    sysinfo (&memory); // If sequential we can add it as a paramater and then just print the line
 
     double total_memory = memory.totalram * memory.mem_unit / (1024 * 1024 * 1024);
     double used_memory = (memory.totalram - memory.freeram) * memory.mem_unit / (1024 * 1024 * 1024);
@@ -56,6 +57,7 @@ void systemOutput(char *terminal){
 }
 
 void userOutput(){
+
     //Ask question about what exactly to print out in terms of user information (user, session, terminal, IP)???
     printf("--------------------------------------------\n");
     printf("### Sessions/users ###\n");
@@ -96,20 +98,20 @@ void graphicsOutput(){
 }
 
 void display(int samples, int tdelay, bool system, bool user, bool graphics, bool sequential){
-printf("display reached");
-char terminal_memory_output[1024];
+
+    char terminal_memory_output[1024];
 
     for (int i = 0; i < samples; i++){
-        
         if (!sequential){
             printf("\033[2J \033[1;1H\n");
         }
+        else { printf(">>> iteration %d\n", i); }
+
         headerUsage(samples, tdelay);
+
         if (system){
             systemOutput(terminal_memory_output);
-            for (int j = 0; j < samples - i - 1; j++){
-                printf("\n");
-            }
+            for (int j = 0; j < samples - i - 1; j++){ printf("\n"); }
         }
         if (user){
             userOutput();
@@ -130,32 +132,6 @@ int main(int argc, char *argv[]){
 
     int samples = 10; int tdelay = 1;
     bool system = true; bool user = true; bool graphics = false; bool sequential = false;
-
-    if (argc == 1){
-        system = true; user = true; graphics = false; sequential = false;
-    }
-    if (argc == 2){
-        if (strcmp(argv[1], "--graphics") == 0 || strcmp(argv[1], "-g") == 0){
-            system = true; user = true; graphics = true; sequential = false;
-        }
-        else if (strcmp(argv[1], "--sequential") == 0 || strcmp(argv[1], "-seq") == 0){
-            system = true; user = true; graphics = false; sequential = true;
-        }
-    }
-    if (argc == 3){
-        //If any of the conditions met then the next loop cannot run
-        if (isdigit(*argv[1]) && isdigit(*argv[2])){
-            samples = atoi(argv[1]);
-            tdelay = atoi(argv[2]);
-            display(samples, tdelay, true, true, graphics, sequential);
-            return 1;
-        }
-        else if (((strcmp(argv[1], "--graphics") == 0 || strcmp(argv[1], "-g") == 0 ) && (strcmp(argv[2], "--sequential") == 0 || strcmp(argv[2], "-seq") == 0)) || ((strcmp(argv[2], "--graphics") == 0 || strcmp(argv[2], "-g") == 0 ) && (strcmp(argv[1], "--sequential") == 0 || strcmp(argv[1], "-seq") == 0))){
-            system = true; user = true; graphics = true; sequential = true;
-            display(samples, tdelay, system, user, graphics, sequential);
-            return 1;
-        }
-    }
 
     bool found = false;
     bool user_specified = false, system_specified = false;
@@ -185,19 +161,16 @@ int main(int argc, char *argv[]){
             sscanf(argv[i], "%d", &tdelay);
         }
         else if (isdigit(*argv[i])){
-            printf("isdigit");
             if (!found){
                 samples = atoi(argv[i]);
                 found = true;
             }
-            else{
-                tdelay = atoi(argv[i]);
-            }
+            else{ tdelay = atoi(argv[i]); }
         }
-
     }
 
     display(samples, tdelay, system, user, graphics, sequential);
 
     return 1;
+
 }
