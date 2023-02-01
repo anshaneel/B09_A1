@@ -8,9 +8,10 @@
 #include <sys/utsname.h>
 #include <sys/sysinfo.h>
 #include <sys/types.h>
+#include <math.h>
 #include <utmp.h>
 
-//TO DO: Fix users, CPU, graphics, sequential?
+//TO DO: CPU, graphics, sequential?
 
 void headerUsage(int samples, int tdelay){
 
@@ -39,7 +40,22 @@ void footerUsage(){
 
 }
 
-void systemOutput(char *terminal){
+void memoryGraphicsOutput(char terminal[1024][1024], double memory_current, double memory_previous, int i){
+
+    char memoryGraphics[1024]
+        if (i == 0){ sprintf(memoryGraphics, "o 0.00 (%d) ", memory_current); }
+        else {
+            // Absolute value of difference in memory usage 
+            double diff = fabs(memory_current - memory_previous);
+            
+        }
+        
+        sprintf(memoryGraphics, "%s %d (%d) ", visual, diff, memory_current);
+        sprintf(terminal[i], "%.2f GB / %.2f GB -- %.2f GB / %.2f GB   |%s\n", used_memory, total_memory, used_virtual, total_virtual, memoryGraphics);
+        
+}
+
+void systemOutput(char terminal[1024][1024], bool graphics, int i, double memory_previous){
 
     printf("--------------------------------------------\n");
     printf("### Memory ### (Phys.Used/Tot -- Virtual Used/Tot)\n");
@@ -51,14 +67,17 @@ void systemOutput(char *terminal){
     double used_memory = (memory.totalram - memory.freeram) * memory.mem_unit / (1024 * 1024 * 1024);
     double total_virtual = (memory.totalram + memory.totalswap) * memory.mem_unit / (1024 * 1024 * 1024);
     double used_virtual = (memory.totalram - memory.freeram + memory.totalswap - memory.freeswap) * memory.mem_unit / (1024 * 1024 * 1024);
+    
+    if (graphics){ memoryGraphicsOutput(); }
+    else { sprintf(terminal[i], "%.2f GB / %.2f GB -- %.2f GB / %.2f GB\n", used_memory, total_memory, used_virtual, total_virtual); }
 
-    sprintf(terminal + strlen(terminal), "%.2f GB / %.2f GB -- %.2f GB / %.2f GB\n", used_memory, total_memory, used_virtual, total_virtual);
-    printf("%s", terminal);
+    for (int j = 0; j <= i; j++){
+        printf("%s", terminal[i]);
+    }
 }
 
 void userOutput(){
 
-    //Ask question about what exactly to print out in terms of user information (user, session, terminal, IP)???
     printf("--------------------------------------------\n");
     printf("### Sessions/users ###\n");
 
@@ -67,8 +86,8 @@ void userOutput(){
 
     while ((utmp = getutent()) != NULL) {
         if (utmp -> ut_type == USER_PROCESS) {
-            //User, session, terminal
-            printf("%s\t %d (%s)\n", utmp -> ut_user, utmp -> ut_session, utmp -> ut_line);
+            //User, session, host
+            printf("%s\t %s (%s)\n", utmp -> ut_user, utmp -> ut_line, utmp -> ut_host);
         }
     }
 
@@ -93,13 +112,9 @@ void CPUOutput(){
 
 }
 
-void graphicsOutput(){
-
-}
-
 void display(int samples, int tdelay, bool system, bool user, bool graphics, bool sequential){
 
-    char terminal_memory_output[1024];
+    char terminal_memory_output[1024][1024];
 
     for (int i = 0; i < samples; i++){
         if (!sequential){
@@ -110,7 +125,7 @@ void display(int samples, int tdelay, bool system, bool user, bool graphics, boo
         headerUsage(samples, tdelay);
 
         if (system){
-            systemOutput(terminal_memory_output);
+            systemOutput(terminal_memory_output, i);
             for (int j = 0; j < samples - i - 1; j++){ printf("\n"); }
         }
         if (user){
@@ -128,6 +143,7 @@ void display(int samples, int tdelay, bool system, bool user, bool graphics, boo
     footerUsage();
 
 }
+
 int main(int argc, char *argv[]){
 
     int samples = 10; int tdelay = 1;
