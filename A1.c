@@ -62,11 +62,15 @@ void memoryGraphicsOutput(char memoryGraphics[1024], double memory_current, doub
 
     *memory_previous = memory_current;
     
-    snprintf(visual + strlen(visual), sizeof(visual) - strlen(visual), "%*c", visual_len, sign);
+    for (int i = 4; i < visual_len + 4; i++){
+        visual[i] = sign;
+    }
+    visual[visual_len + 4] = '\0';
+    
     strncat(visual , &last_char, 1);
 
-    sprintf(memoryGraphics, "%s %.2f (%.2f) ", visual, abs_diff, memory_current);
-        
+    sprintf(memoryGraphics, "%s %.2f (%.2f)", visual, abs_diff, memory_current);
+
 }
 
 void systemOutput(char terminal[1024][1024], bool graphics, int i, double* memory_previous){
@@ -89,10 +93,8 @@ void systemOutput(char terminal[1024][1024], bool graphics, int i, double* memor
         strcat(terminal[i], graphics_output); 
     }
 
-    strcat(terminal[i], "\n");
-
     for (int j = 0; j <= i; j++){
-        printf("%s", terminal[i]);
+        printf("%s\n", terminal[j]);
     }
 }
 
@@ -115,7 +117,22 @@ void userOutput(){
 
 }
 
-void CPUOutput(){
+void CPUGraphics(char terminal[1024][1024], double usage, int i){
+
+    int visual_len = (int)(usage) + 3;
+
+    for (int j = 0; j < visual_len; j++){
+        terminal[i][j] = '|';
+    }
+    terminal[i][visual_len] = '\0';
+
+    for (int j = 0; j < strlen(terminal); j++){
+        printf("%s\n", terminal[j]);
+    }
+
+}
+
+void CPUOutput(char terminal[1024][1024], bool graphics, int i){
 
     //Ask how he wants us to calculate the CPU usage
     struct sysinfo cpu;
@@ -129,12 +146,15 @@ void CPUOutput(){
 
     FILE *fp = fopen("/proc/stat", "r");
 
+    if (graphics){ CPUGraphics(terminal, use, i); }
+
 
 }
 
 void display(int samples, int tdelay, bool system, bool user, bool graphics, bool sequential){
 
     char terminal_memory_output[1024][1024];
+    char CPU_output[1024][1024];
     double memory_previous;
 
     for (int i = 0; i < samples; i++){
@@ -153,7 +173,7 @@ void display(int samples, int tdelay, bool system, bool user, bool graphics, boo
             userOutput();
         }
         if (system){
-            CPUOutput();
+            CPUOutput(CPU_output, graphics, i);
         }
         sleep(tdelay);
     }
