@@ -81,10 +81,10 @@ void systemOutput(char terminal[1024][1024], bool graphics, int i, double* memor
     struct sysinfo memory;
     sysinfo (&memory); // If sequential we can add it as a paramater and then just print the line
 
-    double total_memory = memory.totalram * memory.mem_unit / (1024 * 1024 * 1024);
-    double used_memory = (memory.totalram - memory.freeram) * memory.mem_unit / (1024 * 1024 * 1024);
-    double total_virtual = (memory.totalram + memory.totalswap) * memory.mem_unit / (1024 * 1024 * 1024);
-    double used_virtual = (memory.totalram - memory.freeram + memory.totalswap - memory.freeswap) * memory.mem_unit / (1024 * 1024 * 1024);
+    double total_memory = (double) memory.totalram / (1024 * 1024 * 1024);
+    double used_memory =  (double) (memory.totalram - memory.freeram) / (1024 * 1024 * 1024);
+    double total_virtual = (double) (memory.totalram + memory.totalswap) / (1024 * 1024 * 1024);
+    double used_virtual = (double) (memory.totalram - memory.freeram + memory.totalswap - memory.freeswap) / (1024 * 1024 * 1024);
     
     sprintf(terminal[i], "%.2f GB / %.2f GB -- %.2f GB / %.2f GB", used_memory, total_memory, used_virtual, total_virtual);
 
@@ -119,34 +119,48 @@ void userOutput(){
 
 void CPUGraphics(char terminal[1024][1024], double usage, int i){
 
-    int visual_len = (int)(usage) + 3;
+    int visual_len = (int)(usage) + 12;
+    strcpy(terminal[i], "         ");
 
-    for (int j = 0; j < visual_len; j++){
+    for (int j = 9; j < visual_len; j++){
         terminal[i][j] = '|';
     }
     terminal[i][visual_len] = '\0';
 
-    for (int j = 0; j < strlen(terminal); j++){
+    sprintf(terminal[i] + visual_len, " %.2f", usage);
+
+    for (int j = 0; j <= i ; j++){
         printf("%s\n", terminal[j]);
     }
-
 }
 
-void CPUOutput(char terminal[1024][1024], bool graphics, int i){
+void CPUOutput(char terminal[1024][1024], bool graphics, int i, int* cpu_previous, int* idle_previous){
 
     //Ask how he wants us to calculate the CPU usage
     struct sysinfo cpu;
     sysinfo(&cpu);
-    //Need to fix this 100 is a placeholder
-    double use = ((double)(cpu.uptime - 100) / (double)cpu.uptime) * 100;
+    
+    FILE *fp = fopen("/proc/stat", "r");
+    long int user, nice, system, idle, iowait, irq, softirq;
+    fscanf(fp, "cpu %ld %ld %ld %ld %ld %ld %ld", &user, &nice, &system, &idle, &iowait, &irq, &softirq);
+
+    int cpu_total = user + nice + system + iowait + irq + softirq;
+
+    if (i == -1){
+        *cpu_previous = cpu_total;
+        *idle_previous = idle;
+        return;
+    }
+
+    double cpu_use = fabs((double)((cpu_total - *cpu_previous) - (idle - *idle_previous)) / ((double)(cpu_total - *cpu_previous)+1e-6));
+    *cpu_previous = cpu_total;
+    *idle_previous = idle;
 
     printf("--------------------------------------------\n");
     printf("Number of Cores: %ld\n", sysconf(_SC_NPROCESSORS_ONLN));
-    printf(" total cpu use: %f%%\n", use);
+    printf(" total cpu use: %.2f%%\n", cpu_use);
 
-    FILE *fp = fopen("/proc/stat", "r");
-
-    if (graphics){ CPUGraphics(terminal, use, i); }
+    if (graphics){ CPUGraphics(terminal, cpu_use, i); }
 
 
 }
@@ -156,25 +170,23 @@ void display(int samples, int tdelay, bool system, bool user, bool graphics, boo
     char terminal_memory_output[1024][1024];
     char CPU_output[1024][1024];
     double memory_previous;
+    int cpu_previous, idle_previous;
+
+
+    CPUOutput(CPU_output, graphics, -1, &cpu_previous, &idle_previous);
 
     for (int i = 0; i < samples; i++){
-        if (!sequential){
-            printf("\033[2J \033[1;1H\n");
-        }
+        if (!sequential){ printf("\033[2J \033[1;1H\n"); }
         else { printf(">>> iteration %d\n", i); }
 
         headerUsage(samples, tdelay);
-
         if (system){
             systemOutput(terminal_memory_output, graphics, i, &memory_previous);
             for (int j = 0; j < samples - i - 1; j++){ printf("\n"); }
         }
-        if (user){
-            userOutput();
-        }
-        if (system){
-            CPUOutput(CPU_output, graphics, i);
-        }
+        if (user){ userOutput(); }
+        if (system){ CPUOutput(CPU_output, graphics, i, &cpu_previous, &idle_previous); }
+
         sleep(tdelay);
     }
 
@@ -192,13 +204,11 @@ int main(int argc, char *argv[]){
 
     for (int i = 1; i < argc; i++){
         if (strcmp(argv[i], "--system") == 0 || strcmp(argv[i], "-s") == 0){
-            system = true;
-            system_specified = true;
+            system = true; system_specified = true;
             if (!user_specified){ user = false; }
         }
         else if (strcmp(argv[i], "--user") == 0 || strcmp(argv[i], "-u") == 0){
-            user = true;
-            user_specified = true;
+            user = true; user_specified = true;
             if (!system_specified){ system = false; }
         }
         else if (strcmp(argv[i], "--graphics") == 0 || strcmp(argv[i], "-g") == 0){
