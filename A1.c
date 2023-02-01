@@ -40,18 +40,32 @@ void footerUsage(){
 
 }
 
-void memoryGraphicsOutput(char terminal[1024][1024], double memory_current, double memory_previous, int i){
+void memoryGraphicsOutput(char memoryGraphics[1024], double memory_current, double* memory_previous, int i){
 
-    char memoryGraphics[1024]
-        if (i == 0){ sprintf(memoryGraphics, "o 0.00 (%d) ", memory_current); }
-        else {
-            // Absolute value of difference in memory usage 
-            double diff = fabs(memory_current - memory_previous);
-            
-        }
+    if (i == 0){ *memory_previous = memory_current; }
         
-        sprintf(memoryGraphics, "%s %d (%d) ", visual, diff, memory_current);
-        sprintf(terminal[i], "%.2f GB / %.2f GB -- %.2f GB / %.2f GB   |%s\n", used_memory, total_memory, used_virtual, total_virtual, memoryGraphics);
+    // Absolute value of difference in memory usage
+    double diff = memory_current - *memory_previous;
+    double abs_diff = fabs(diff);
+    
+    char visual[1024] = "   |";
+    int visual_len = (int)( abs_diff / 0.01 );
+    char last_char;
+    char sign;
+
+    if (diff > 0) { 
+        sign = '#';
+        last_char = '*';
+        if (visual_len == 0) { last_char = 'o'; }
+    }
+    else { sign = ':'; last_char = '@'; }
+
+    *memory_previous = memory_current;
+    
+    snprintf(visual + strlen(visual), sizeof(visual) - strlen(visual), "%*c", visual_len, sign);
+    strncat(visual , &last_char, 1);
+
+    sprintf(memoryGraphics, "%s %.2f (%.2f) ", visual, abs_diff, memory_current);
         
 }
 
@@ -68,8 +82,14 @@ void systemOutput(char terminal[1024][1024], bool graphics, int i, double memory
     double total_virtual = (memory.totalram + memory.totalswap) * memory.mem_unit / (1024 * 1024 * 1024);
     double used_virtual = (memory.totalram - memory.freeram + memory.totalswap - memory.freeswap) * memory.mem_unit / (1024 * 1024 * 1024);
     
-    if (graphics){ memoryGraphicsOutput(); }
-    else { sprintf(terminal[i], "%.2f GB / %.2f GB -- %.2f GB / %.2f GB\n", used_memory, total_memory, used_virtual, total_virtual); }
+    sprintf(terminal[i], "%.2f GB / %.2f GB -- %.2f GB / %.2f GB", used_memory, total_memory, used_virtual, total_virtual);
+
+    if (graphics){ 
+        char graphics_output[1024]; memoryGraphicsOutput(graphics_output, total_memory, &memory_previous, i);
+        strcat(terminal[i], graphics_output); 
+    }
+
+    strcat(terminal[i], "\n");
 
     for (int j = 0; j <= i; j++){
         printf("%s", terminal[i]);
@@ -115,6 +135,7 @@ void CPUOutput(){
 void display(int samples, int tdelay, bool system, bool user, bool graphics, bool sequential){
 
     char terminal_memory_output[1024][1024];
+    double memory_previous;
 
     for (int i = 0; i < samples; i++){
         if (!sequential){
@@ -125,7 +146,7 @@ void display(int samples, int tdelay, bool system, bool user, bool graphics, boo
         headerUsage(samples, tdelay);
 
         if (system){
-            systemOutput(terminal_memory_output, i);
+            systemOutput(terminal_memory_output, graphics, i, memory_previous);
             for (int j = 0; j < samples - i - 1; j++){ printf("\n"); }
         }
         if (user){
@@ -133,9 +154,6 @@ void display(int samples, int tdelay, bool system, bool user, bool graphics, boo
         }
         if (system){
             CPUOutput();
-        }
-        if (graphics){
-            graphicsOutput();
         }
         sleep(tdelay);
     }
