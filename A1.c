@@ -53,7 +53,7 @@ void memoryGraphicsOutput(char memoryGraphics[1024], double memory_current, doub
     char last_char;
     char sign;
 
-    if (diff > 0) { 
+    if (diff >= 0) { 
         sign = '#';
         last_char = '*';
         if (visual_len == 0) { last_char = 'o'; }
@@ -69,7 +69,7 @@ void memoryGraphicsOutput(char memoryGraphics[1024], double memory_current, doub
         
 }
 
-void systemOutput(char terminal[1024][1024], bool graphics, int i, double memory_previous){
+void systemOutput(char terminal[1024][1024], bool graphics, int i, double* memory_previous){
 
     printf("--------------------------------------------\n");
     printf("### Memory ### (Phys.Used/Tot -- Virtual Used/Tot)\n");
@@ -85,7 +85,7 @@ void systemOutput(char terminal[1024][1024], bool graphics, int i, double memory
     sprintf(terminal[i], "%.2f GB / %.2f GB -- %.2f GB / %.2f GB", used_memory, total_memory, used_virtual, total_virtual);
 
     if (graphics){ 
-        char graphics_output[1024]; memoryGraphicsOutput(graphics_output, total_memory, &memory_previous, i);
+        char graphics_output[1024]; memoryGraphicsOutput(graphics_output, used_memory, memory_previous, i);
         strcat(terminal[i], graphics_output); 
     }
 
@@ -146,7 +146,7 @@ void display(int samples, int tdelay, bool system, bool user, bool graphics, boo
         headerUsage(samples, tdelay);
 
         if (system){
-            systemOutput(terminal_memory_output, graphics, i, memory_previous);
+            systemOutput(terminal_memory_output, graphics, i, &memory_previous);
             for (int j = 0; j < samples - i - 1; j++){ printf("\n"); }
         }
         if (user){
