@@ -11,8 +11,6 @@
 #include <math.h>
 #include <utmp.h>
 
-//TO DO: CPU, graphics, sequential?
-
 void headerUsage(int samples, int tdelay){
 
     //Get the memory usage
@@ -134,17 +132,21 @@ void CPUGraphics(char terminal[1024][1024], double usage, int i){
     }
 }
 
-void CPUOutput(char terminal[1024][1024], bool graphics, int i, int* cpu_previous, int* idle_previous){
+void CPUOutput(char terminal[1024][1024], bool graphics, int i, long int* cpu_previous, long int* idle_previous){
 
     //Ask how he wants us to calculate the CPU usage
     struct sysinfo cpu;
     sysinfo(&cpu);
-    
+
     FILE *fp = fopen("/proc/stat", "r");
     long int user, nice, system, idle, iowait, irq, softirq;
     fscanf(fp, "cpu %ld %ld %ld %ld %ld %ld %ld", &user, &nice, &system, &idle, &iowait, &irq, &softirq);
 
-    int cpu_total = user + nice + system + iowait + irq + softirq;
+    fclose(fp);
+
+    long int cpu_total = user + nice + system + iowait + irq + softirq;
+
+    printf("cup_total: %ld cpu_prev: %ld system: %ld idle: %ld idle_prev: %ld\n", cpu_total, *cpu_previous, system, idle, *idle_previous);
 
     if (i == -1){
         *cpu_previous = cpu_total;
@@ -152,9 +154,11 @@ void CPUOutput(char terminal[1024][1024], bool graphics, int i, int* cpu_previou
         return;
     }
 
-    double cpu_use = fabs((double)((cpu_total - *cpu_previous) - (idle - *idle_previous)) / ((double)(cpu_total - *cpu_previous)+1e-6));
+    //cpu_use confirmed and 
+    double cpu_use = fabs((double)((cpu_total - *cpu_previous) - (idle - *idle_previous)) / ((double)(cpu_total - idle) + 1e-8));
     *cpu_previous = cpu_total;
     *idle_previous = idle;
+
 
     printf("--------------------------------------------\n");
     printf("Number of Cores: %ld\n", sysconf(_SC_NPROCESSORS_ONLN));
@@ -170,7 +174,7 @@ void display(int samples, int tdelay, bool system, bool user, bool graphics, boo
     char terminal_memory_output[1024][1024];
     char CPU_output[1024][1024];
     double memory_previous;
-    int cpu_previous, idle_previous;
+    long int cpu_previous = 0, idle_previous = 0;
 
 
     CPUOutput(CPU_output, graphics, -1, &cpu_previous, &idle_previous);
@@ -235,6 +239,6 @@ int main(int argc, char *argv[]){
 
     display(samples, tdelay, system, user, graphics, sequential);
 
-    return 1;
+    return 0;
 
 }
