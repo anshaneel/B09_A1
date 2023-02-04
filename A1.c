@@ -12,21 +12,53 @@
 #include <utmp.h>
 
 void headerUsage(int samples, int tdelay){
+    /**
+    * Retrieves and prints the current memory usage in kilobytes
+    * 
+    * @samples: number of samples 
+    * @tdelay: time delay between each sample in seconds
+    *
+    * The function uses the getrusage function from the sys/resource.h library to retrieve information about the memory usage
+    * of the calling process and then prints the result to the terminal.
+    *
+    * Outputs: Nbr of samples: [samples] -- every [tdelay] secs
+    *           Memory usage: [used_memory] kilobytes
+    */
 
-    //Get the memory usage
+    // Get information about the utilization of memory in kilobytes and store it in used_memory
     struct rusage usage;
     getrusage(RUSAGE_SELF, &usage);
     long used_memory = usage.ru_maxrss;
 
+    // Print the number of samples, tdelay, and memory usgae
     printf("Nbr of samples: %d -- every %d secs\n Memory usage: %ld kilobytes\n", samples, tdelay, used_memory);
 
 }
 
 void footerUsage(){
-
+    /**
+     * Retrives and prints system information
+     *
+     * The function gets information about the system usinf uname function from sys/utsname.h library
+     * 
+     * Output:
+     *
+     * --------------------------------------------
+     * ### System Information ###
+     *  System Name = [sysname]
+     *  Machine Name = [nodename]
+     *  Version = [version]
+     *  Release = [release]
+     *  Architecture = [machine]
+     *  --------------------------------------------
+     *
+     */
+    
+    // Retrive System information
     struct utsname sysinfo;
     uname(&sysinfo);
 
+    // Prints relavent information such as system name, Machine name, Version, Releasem Architecture
     printf("--------------------------------------------\n");
     printf("### System Information ###\n");
     printf(" System Name = %s\n", sysinfo.sysname);
@@ -144,9 +176,9 @@ void CPUOutput(char terminal[1024][1024], bool graphics, int i, long int* cpu_pr
 
     fclose(fp);
 
-    long int cpu_total = user + nice + system + iowait + irq + softirq;
+    
 
-    printf("cup_total: %ld cpu_prev: %ld system: %ld idle: %ld idle_prev: %ld\n", cpu_total, *cpu_previous, system, idle, *idle_previous);
+    long int cpu_total = user + nice + system + iowait + irq + softirq;
 
     if (i == -1){
         *cpu_previous = cpu_total;
@@ -154,11 +186,14 @@ void CPUOutput(char terminal[1024][1024], bool graphics, int i, long int* cpu_pr
         return;
     }
 
-    //cpu_use confirmed and 
-    double cpu_use = fabs((double)((cpu_total - *cpu_previous) - (idle - *idle_previous)) / ((double)(cpu_total - idle) + 1e-8));
+    long int total_prev = *cpu_previous + *idle_previous;
+    long int total_cur = idle + cpu_total;
+    double totald = (double) total_cur - (double) total_prev;
+    double idled = (double) idle - (double) *idle_previous;
+    double cpu_use = fabs((1000 * (totald - idled) / (totald + 1e-6) + 1) / 10);
+
     *cpu_previous = cpu_total;
     *idle_previous = idle;
-
 
     printf("--------------------------------------------\n");
     printf("Number of Cores: %ld\n", sysconf(_SC_NPROCESSORS_ONLN));
