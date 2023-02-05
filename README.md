@@ -47,13 +47,14 @@ B09_A1
 ### --samples=N
 
         if used the value N will indicate how many times the statistics are going to be collected and results will be average and reported based on the N number of repetitions.
-If not value is indicated the default value will be 10.
+If value is not indicated the default value will be 10.
 
 
 ### --tdelay=T
 
         to indicate how frequently to sample in seconds.
-If not value is indicated the default value will be 1 sec.
+If value is not indicated the default value will be 1 sec.
+
 ## How to run the program
 1) Compile it: gcc mySystemStats.c
 2) Run the executable file with any of the command line arguments: ex) ./a.out --samples=10 --tdelay=2 --graphics
