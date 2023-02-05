@@ -190,5 +190,11 @@ B09_A1
 
 I approached this problem by splitting it up into chunks and building functionality from the ground up. I started by parsing the command line arguments so I could test the other functions in isolation when implemented, then passed the passed argument to the display function.
 
-The display function is where the program was put together, it would call all the functions based on the arguments passed and print them sample number of times with a delay of tdelay between each iteration. 
+The display function is where the program was put together, it would call all the functions based on the arguments passed and print them sample number of times with a delay of tdelay between each iteration. The function refreshes the terminal between iteration if sequential is not selected, it does this by initializing a 2D array to represent a string array and store each line of terminal output, then we print the output with an extra line after the next iteration.
+
+Additionally the graphics option selected applies to memory and cpu output, to configure the visuals I created char arrays to represent strings and initialized them with characters based on the assignment specifications then adding them to the main strings that stores values to print in the terminal.
+
+The cpu visuals are initialized with 3 bars "|||" then an additional bar for every percentage increase in cpu usage
+The memory visuals are initialized with a symbol for every 0.01 change in memory usage
+
 
