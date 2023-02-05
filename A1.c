@@ -261,6 +261,8 @@ void CPUOutput(char terminal[1024][1024], bool graphics, int i, long int* cpu_pr
     double idled = (double) idle - (double) *idle_previous;
     double cpu_use = fabs((1000 * (totald - idled) / (totald + 1e-6) + 1) / 10);
 
+    if (cpu_use > 100){ cpu_use = 100; }
+
     // Makes the previous usage equal to the current for the next iteration
     *cpu_previous = cpu_total;
     *idle_previous = idle;
@@ -300,7 +302,7 @@ void display(int samples, int tdelay, bool system, bool user, bool graphics, boo
 
     // Initialize the cpu information with -1 iteration
     CPUOutput(CPU_output, graphics, -1, &cpu_previous, &idle_previous);
-
+    sleep(1);
     // Loop samples number of times
     for (int i = 0; i < samples; i++){
         // If sequential is selected then we do not reset terminal between iterations and state iteration number
