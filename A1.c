@@ -8,8 +8,58 @@
 #include <sys/utsname.h>
 #include <sys/sysinfo.h>
 #include <sys/types.h>
+#include <signal.h>
 #include <math.h>
 #include <utmp.h>
+#include <errno.h>
+
+void signal_handler(int sig) {
+    char ans;
+
+    // If Ctrl-Z detected it will proceed as normal
+    if (sig == SIGTSTP) { return; }
+
+    // If Ctrl-C detected it will ask user if they want to proceed
+    if (sig == SIGINT) {
+        printf("\nCtrl-C detected: ");
+        printf("Do you want to quit? (press 'y' if yes) ");
+
+        // Wait for user input
+        int ret = scanf(" %c", &ans);
+        if (ret == EOF) {
+            if (errno == EINTR) {
+                printf("\nSignal detected during scanf, resuming...\n");
+                return;
+            } 
+            else {
+                perror("scanf error");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        if (ans == 'y' || ans == 'Y') {
+            exit(EXIT_SUCCESS);
+        } else {
+            printf("Resuming...\n");
+        }
+    }
+}
+
+void createChildProcess(int pipefd[2], void (*function)()) {
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        fprintf(stderr, "Error: fork failed. (%s)\n", strerror(errno));
+        exit(1);
+    } else if (pid == 0) {
+        // Child process
+        close(pipefd[0]); // Close unused read end
+        dup2(pipefd[1], STDOUT_FILENO); // Redirect stdout to the pipe
+        close(pipefd[1]); // Close unused write end
+        function();
+        exit(0);
+    }
+}
 
 void headerUsage(int samples, int tdelay){
     /**
@@ -27,11 +77,18 @@ void headerUsage(int samples, int tdelay){
 
     // Get information about the utilization of memory in kilobytes and store it in used_memory
     struct rusage usage;
-    getrusage(RUSAGE_SELF, &usage);
+    int result = getrusage(RUSAGE_SELF, &usage);
+
+    // Check for errors in getrusage
+    if (result != 0) {
+        fprintf(stderr, "Error: getrusage failed with error code: %d - %s\n", errno, strerror(errno));
+        return;
+    }
+
     long used_memory = usage.ru_maxrss;
 
-    // Print the number of samples, tdelay, and memory usgae
-    printf("Nbr of samples: %d -- every %d secs\n Memory usage: %ld kilobytes\n", samples, tdelay, used_memory);
+    // Print the number of samples, tdelay, and memory usage
+    printf("Nbr of samples: %d -- every %d secs\nMemory usage: %ld kilobytes\n", samples, tdelay, used_memory);
 
 }
 
@@ -55,9 +112,15 @@ void footerUsage(){
     
     // Retrive System information
     struct utsname sysinfo;
-    uname(&sysinfo);
+    int result = uname(&sysinfo);
 
-    // Prints relavent information such as system name, Machine name, Version, Releasem Architecture
+    // Check for errors in uname
+    if (result == -1) {
+        fprintf(stderr, "Error: uname failed with error code: %d - %s\n", errno, strerror(errno));
+        return;
+    }
+
+    // Prints relevant information such as system name, machine name, version, release, architecture
     printf("--------------------------------------------\n");
     printf("### System Information ###\n");
     printf(" System Name = %s\n", sysinfo.sysname);
@@ -138,7 +201,13 @@ void systemOutput(char terminal[1024][1024], bool graphics, int i, double* memor
 
     // Gets memory
     struct sysinfo memory;
-    sysinfo (&memory);
+    int result = sysinfo(&memory);
+
+    // Check for errors in sysinfo
+    if (result != 0) {
+        fprintf(stderr, "Error: sysinfo failed with error code: %d - %s\n", errno, strerror(errno));
+        return;
+    }
 
     // Calculate the memory usgae and total memory in GB
     double total_memory = (double) memory.totalram / (1024 * 1024 * 1024);
@@ -171,19 +240,26 @@ void userOutput(){
     printf("--------------------------------------------\n");
     printf("### Sessions/users ###\n");
 
-    // Initalize and open utmp
+    // Initialize and open utmp
     struct utmp *utmp;
+    if (utmpname(_PATH_UTMP) == -1) {
+        perror("Error setting utmp file");
+        return;
+    }
+
     setutent();
 
     while ((utmp = getutent()) != NULL) {
+        // Check for errors in getutent() -------------------
+
         // Checks for user process
-        if (utmp -> ut_type == USER_PROCESS) {
+        if (utmp->ut_type == USER_PROCESS) {
             // Prints the User, session, host
-            printf("%s\t %s (%s)\n", utmp -> ut_user, utmp -> ut_line, utmp -> ut_host);
+            printf("%s\t %s (%s)\n", utmp->ut_user, utmp->ut_line, utmp->ut_host);
         }
     }
 
-    // close utmp
+    // Check for errors in endutent()
     endutent();
 
 }
@@ -236,13 +312,27 @@ void CPUOutput(char terminal[1024][1024], bool graphics, int i, long int* cpu_pr
 
     // Gets system info
     struct sysinfo cpu;
-    sysinfo(&cpu);
+    if (sysinfo(&cpu) != 0) {
+        fprintf(stderr, "Error: failed to get system info. (%s)\n", strerror(errno));
+        return;
+    }
     
     // Opens proc stat file with cpu usage
     FILE *fp = fopen("/proc/stat", "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Error: failed to open /proc/stat. (%s)\n", strerror(errno));
+        return;
+    }
+
     long int user, nice, system, idle, iowait, irq, softirq;
-    fscanf(fp, "cpu %ld %ld %ld %ld %ld %ld %ld", &user, &nice, &system, &idle, &iowait, &irq, &softirq);
+    int read_items = fscanf(fp, "cpu %ld %ld %ld %ld %ld %ld %ld", &user, &nice, &system, &idle, &iowait, &irq, &softirq);
     fclose(fp);
+
+    // Checks that all the items have been read
+    if (read_items != 7) {
+        fprintf(stderr, "Error: failed to read CPU values from /proc/stat. Read %d items instead of 7.\n", read_items);
+        return;
+    }
 
     // Calculates total usage of cpu
     long int cpu_total = user + nice + system + iowait + irq + softirq;
@@ -254,7 +344,7 @@ void CPUOutput(char terminal[1024][1024], bool graphics, int i, long int* cpu_pr
         return;
     }
 
-    // Cpu value calculations
+    // Cpu value calculations (Same as assignment)
     long int total_prev = *cpu_previous + *idle_previous;
     long int total_cur = idle + cpu_total;
     double totald = (double) total_cur - (double) total_prev;
@@ -268,14 +358,19 @@ void CPUOutput(char terminal[1024][1024], bool graphics, int i, long int* cpu_pr
     *idle_previous = idle;
 
     // Prints the number of cores and cpu usage
+    long int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+    if (num_cores < 0) {
+        fprintf(stderr, "Error: failed to get the number of cores. (%s)\n", strerror(errno));
+        return;
+    }
+
     printf("--------------------------------------------\n");
-    printf("Number of Cores: %ld\n", sysconf(_SC_NPROCESSORS_ONLN));
+    printf("Number of Cores: %ld\n", num_cores);
     printf(" total cpu use: %.2f%%\n", cpu_use);
 
     // If graphics have been slected then call the graphics function to add the visuals
     if (graphics){ CPUGraphics(terminal, cpu_use, i); }
-
-
+    
 }
 
 void display(int samples, int tdelay, bool system, bool user, bool graphics, bool sequential){
@@ -294,15 +389,40 @@ void display(int samples, int tdelay, bool system, bool user, bool graphics, boo
     * Equential prints information in sequential manner
     */
 
+    // Initialize signal handler
+    struct sigaction act;
+    act.sa_handler = signal_handler;
+    act.sa_flags = 0;
+    sigemptyset(&act.sa_mask);
+
+    if (sigaction(SIGINT, &act, NULL) == -1) {
+        perror("sigaction error for SIGINT");
+        exit(EXIT_FAILURE);
+    }
+
+    if (sigaction(SIGTSTP, &act, NULL) == -1) {
+        perror("sigaction error for SIGTSTP");
+        exit(EXIT_FAILURE);
+    }
+
+
     // Initialize variables for terminal and cpu output, aswell as previous values for memeory and cpu usage
     char terminal_memory_output[1024][1024];
     char CPU_output[1024][1024];
     double memory_previous;
     long int cpu_previous = 0, idle_previous = 0;
 
+    // Create Pipes
+    int pipefd_memory[2], pipefd_cpu[2], pipefd_user[2];
+
+    if (pipe(pipefd_memory) == -1 || pipe(pipefd_cpu) == -1 || pipe(pipefd_user) == -1) {
+        fprintf(stderr, "Error: pipe creation failed. (%s)\n", strerror(errno));
+        exit(1);
+    }
+
     // Initialize the cpu information with -1 iteration
     CPUOutput(CPU_output, graphics, -1, &cpu_previous, &idle_previous);
-    sleep(1);
+    
     // Loop samples number of times
     for (int i = 0; i < samples; i++){
         // If sequential is selected then we do not reset terminal between iterations and state iteration number
@@ -368,11 +488,11 @@ int main(int argc, char *argv[]){
         }
         else if (strncmp(argv[i], "--samples=", 10) == 0){
             // Gets integer in string, and sets found to true to indicate that samples have been seen
-            sscanf(argv[i], "%d", &samples);
+            sscanf(argv[i] + 10, "%d", &samples);
             found = true;
         }
         else if (strncmp(argv[i], "--tdelay=", 9) == 0){
-            sscanf(argv[i], "%d", &tdelay);
+            sscanf(argv[i] + 9, "%d", &tdelay);
         }
         // If integer is passed as command line argument the first is samples and the second is delay
         else if (isdigit(*argv[i])){
